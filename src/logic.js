@@ -1,7 +1,7 @@
 export function asCents(value){if(typeof value==='number'){if(!Number.isFinite(value))return null;value=String(value)}const s=String(value??'').trim().replace(/\s/g,'').replace(',','.');if(!/^\d+(?:\.\d{1,2})?$/.test(s))return null;const [whole,dec='']=s.split('.');const n=Number(whole)*100+Number(dec.padEnd(2,'0'));return Number.isSafeInteger(n)?n:null}
 const bytesToHex=arr=>Array.from(arr,b=>b.toString(16).padStart(2,'0')).join('');
 const hexToBytes=hex=>Uint8Array.from(hex.match(/.{2}/g)||[],h=>parseInt(h,16));
-async function derive(password,salt){let key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);let bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:hexToBytes(salt),iterations:210000},key,256);return bytesToHex(new Uint8Array(bits))}
+async function derive(password,salt){let key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']);let bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:hexToBytes(salt),iterations:100000},key,256);return bytesToHex(new Uint8Array(bits))}
 export async function hashPassword(password){const salt=bytesToHex(crypto.getRandomValues(new Uint8Array(16)));return {salt,hash:await derive(password,salt)}}
 export async function verifyPassword(password,salt,hash){const actual=await derive(password,salt);if(actual.length!==hash.length)return false;let mismatch=0;for(let i=0;i<hash.length;i++)mismatch|=actual.charCodeAt(i)^hash.charCodeAt(i);return mismatch===0}
 export async function hashToken(token){return bytesToHex(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token))))}
