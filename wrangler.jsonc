@@ -4,6 +4,6 @@
   "compatibility_date": "2026-10-01",
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
   "d1_databases": [
-    { "binding": "DB", "database_name": "elf-gestion-db", "database_id": "REMPLACER_PAR_IDENTIFIANT_D1" }
+    { "binding": "DB", "database_name": "elf-gestion-db", "database_id": "0fff3c89-66a1-48ad-a78c-116e26546fd2" }
   ]
 }
