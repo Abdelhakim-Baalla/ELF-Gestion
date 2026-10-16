@@ -80,6 +80,22 @@ async function handle(request,env){const url=new URL(request.url),path=url.pathn
  checkWrite(user);const b=await request.json(),kind=text(b.kind),id=text(b.id);if(!['quotes','receipts','expenses','payments','larbi_transfers'].includes(kind))throw Error('Annulation non autorisée');const old=await dbget(db,`SELECT * FROM ${kind} WHERE id=?`,id);if(!old||old.canceled)throw Error('Opération introuvable');if(kind==='expenses'){const paid=await dbget(db,'SELECT COUNT(*) n FROM payments WHERE expense_id=? AND canceled=0',id);if(paid.n)throw Error('Annuler les paiements liés avant la dépense')}
  await db.prepare(`UPDATE ${kind} SET canceled=1 WHERE id=?`).bind(id).run();await audit(db,user,'cancel',kind,id,old,{...old,canceled:1});return response({ok:true})
  }
+ if(path==='/api/archive'&&method==='POST'){
+ checkWrite(user);const b=await request.json(),kind=text(b.kind),id=text(b.id),archive=b.archive!==false;
+ if(!['sites','parties'].includes(kind))throw Error('Archivage non autorisé');
+ const old=await dbget(db,`SELECT * FROM ${kind} WHERE id=?`,id);if(!old)throw Error('Introuvable');
+ if(archive&&kind==='sites'){const linked=await dbget(db,'SELECT COUNT(*) n FROM expenses WHERE site_id=? AND canceled=0',id);if(linked.n)throw Error('Solder les dépenses avant d'archiver ce chantier')}
+ if(archive&&kind==='parties'){const linked=await dbget(db,'SELECT COUNT(*) n FROM expenses WHERE party_id=? AND canceled=0',id);if(linked.n)throw Error('Solder les dépenses liées avant d'archiver ce fournisseur')}
+ await db.prepare(`UPDATE ${kind} SET archived=? WHERE id=?`).bind(archive?1:0,id).run();
+ await audit(db,user,archive?'archive':'restore',kind,id,old,{...old,archived:archive?1:0});return response({ok:true})
+ }
+ if(path==='/api/users/toggle'&&method==='POST'){
+ checkAdmin(user);const b=await request.json(),id=text(b.id);if(id===user.id)throw Error('Impossible de désactiver son propre compte');
+ const u=await dbget(db,'SELECT * FROM users WHERE id=?',id);if(!u)throw Error('Utilisateur introuvable');
+ const active=u.active?0:1;await db.prepare('UPDATE users SET active=? WHERE id=?').bind(active,id).run();
+ if(!active)await db.prepare('DELETE FROM sessions WHERE user_id=?').bind(id).run();
+ await audit(db,user,active?'activate':'deactivate','users',id,{active:u.active},{active});return response({ok:true,active})
+ }
  return fail('Route inconnue',404)
 }
 export default {async fetch(request,env){const url=new URL(request.url);if(!url.pathname.startsWith('/api/'))return env.ASSETS?env.ASSETS.fetch(request):new Response('Assets manquants',{status:503});if(!['GET','POST'].includes(request.method))return fail('Méthode non autorisée',405);if(request.method==='POST'&&request.headers.get('origin')&&request.headers.get('origin')!==url.origin)return fail('Origine non autorisée',403);try{return await handle(request,env)}catch(e){console.error('API error',e);if(e?.message?.includes('no such table'))return fail('Base de données non initialisée : exécuter la migration D1.',503);if(e?.message?.includes('UNIQUE constraint'))return fail('Cet élément existe déjà',409);if(e?.message?.includes('FOREIGN KEY constraint'))return fail('Opération liée à une autre information',409);if(e instanceof SyntaxError)return fail('Format de saisie incorrect',400);return fail(e?.message||'Erreur du serveur',e?.message?.includes('Accès')||e?.message?.includes('Administrateur')?403:400)}}};
