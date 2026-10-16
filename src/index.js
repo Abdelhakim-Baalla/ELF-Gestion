@@ -84,8 +84,8 @@ async function handle(request,env){const url=new URL(request.url),path=url.pathn
  checkWrite(user);const b=await request.json(),kind=text(b.kind),id=text(b.id),archive=b.archive!==false;
  if(!['sites','parties'].includes(kind))throw Error('Archivage non autorisé');
  const old=await dbget(db,`SELECT * FROM ${kind} WHERE id=?`,id);if(!old)throw Error('Introuvable');
- if(archive&&kind==='sites'){const linked=await dbget(db,'SELECT COUNT(*) n FROM expenses WHERE site_id=? AND canceled=0',id);if(linked.n)throw Error('Solder les dépenses avant d'archiver ce chantier')}
- if(archive&&kind==='parties'){const linked=await dbget(db,'SELECT COUNT(*) n FROM expenses WHERE party_id=? AND canceled=0',id);if(linked.n)throw Error('Solder les dépenses liées avant d'archiver ce fournisseur')}
+ if(archive&&kind==='sites'){const linked=await dbget(db,'SELECT COUNT(*) n FROM expenses WHERE site_id=? AND canceled=0',id);if(linked.n)throw Error('Solder les dépenses avant d’archiver ce chantier')}
+ if(archive&&kind==='parties'){const linked=await dbget(db,'SELECT COUNT(*) n FROM expenses WHERE party_id=? AND canceled=0',id);if(linked.n)throw Error('Solder les dépenses liées avant d’archiver ce fournisseur')}
  await db.prepare(`UPDATE ${kind} SET archived=? WHERE id=?`).bind(archive?1:0,id).run();
  await audit(db,user,archive?'archive':'restore',kind,id,old,{...old,archived:archive?1:0});return response({ok:true})
  }
