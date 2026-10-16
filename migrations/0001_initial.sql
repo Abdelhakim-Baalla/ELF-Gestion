@@ -1,0 +1,17 @@
+CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin','editor','viewer')), salt TEXT NOT NULL, password_hash TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (id_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS parties (id TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('supplier','worker')), name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, archived INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS sites (id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL CHECK(owner IN ('ELF','LARBI')), phone TEXT NOT NULL DEFAULT '', progress TEXT NOT NULL DEFAULT 'saisie' CHECK(progress IN ('saisie','verifie')), archived INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS quotes (id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), type TEXT NOT NULL CHECK(type IN ('devis','avenant')), amount INTEGER NOT NULL CHECK(amount>=0), date TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', canceled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS receipts (id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), amount INTEGER NOT NULL CHECK(amount>0), date TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', canceled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, site_id TEXT REFERENCES sites(id), party_id TEXT REFERENCES parties(id), type TEXT NOT NULL CHECK(type IN ('supplier','worker','other')), description TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), date TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', canceled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS payments (id TEXT PRIMARY KEY, expense_id TEXT NOT NULL REFERENCES expenses(id), amount INTEGER NOT NULL CHECK(amount>0), payer TEXT NOT NULL CHECK(payer IN ('ELF','LARBI')), date TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', canceled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS larbi_transfers (id TEXT PRIMARY KEY, direction TEXT NOT NULL CHECK(direction IN ('advance','repayment')), amount INTEGER NOT NULL CHECK(amount>0), date TEXT NOT NULL, site_id TEXT REFERENCES sites(id), note TEXT NOT NULL DEFAULT '', canceled INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS audit (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, action TEXT NOT NULL, entity TEXT NOT NULL, entity_id TEXT NOT NULL, before_json TEXT, after_json TEXT, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS i_sites_owner ON sites(owner);
+CREATE INDEX IF NOT EXISTS i_exp_site ON expenses(site_id);
+CREATE INDEX IF NOT EXISTS i_exp_party ON expenses(party_id);
+CREATE INDEX IF NOT EXISTS i_pay_exp ON payments(expense_id);
+CREATE INDEX IF NOT EXISTS i_quote_site ON quotes(site_id);
+CREATE INDEX IF NOT EXISTS i_receipt_site ON receipts(site_id);
+CREATE INDEX IF NOT EXISTS i_audit_date ON audit(created_at);
