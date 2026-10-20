@@ -129,17 +129,20 @@ function paginationBar(){return `<div class="toolbar" style="justify-content:fle
 function auth(needsSetup){root.innerHTML=`<div class="authcard"><span class="mark">E</span><h1>ELF Construction</h1><p class="muted">${needsSetup?'Première installation — compte administrateur':'Accès privé — Gestion financière'}</p><form id="authForm">${needsSetup?`<div class="field"><label>Code de première installation (SETUP_TOKEN)</label><input name="setupToken" type="password" required></div><div class="field"><label>Votre nom</label><input name="name" required></div>`:''}<div class="field"><label>Adresse e-mail</label><input name="email" type="email" autocomplete="username" required></div><div class="field"><label>Mot de passe ${needsSetup?'(12 caractères minimum)':''}</label><input name="password" type="password" autocomplete="${needsSetup?'new-password':'current-password'}" required></div><div id="authError"></div><button class="button" type="submit">${needsSetup?'Créer le compte administrateur':'Se connecter'}</button></form></div></div>`;$('#authForm').onsubmit=async e=>{e.preventDefault();let b=Object.fromEntries(new FormData(e.target));try{await api(needsSetup?'setup':'login',b);if(needsSetup){toast('Administrateur créé. Connectez-vous.');auth(false)}else{user=(await api('me')).user;await refresh()}}catch(err){$('#authError').innerHTML=`<div class="alert">${esc(err.message)}</div>`}}}
 async function loadSheetJS(){if(window.XLSX)return window.XLSX;return new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';s.onload=()=>res(window.XLSX);s.onerror=()=>rej(Error('Impossible de charger le parseur Excel'));document.head.appendChild(s)})}
 function excelDateToISO(v){if(typeof v==='number'){const d=new Date(Math.round((v-25569)*86400000));return d.toISOString().slice(0,10)}if(typeof v==='string'){const s=v.trim();const m1=s.match(/^(\d{4})-(\d{2})-(\d{2})$/);if(m1)return s;const m2=s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);if(m2)return `${m2[3]}-${m2[2]}-${m2[1]}`;const m3=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);if(m3)return `${m3[3]}-${m3[2].padStart(2,'0')}-${m3[1].padStart(2,'0')}`}return null}
+function findSheet(wb,keywords){const norm=s=>s.toUpperCase().replace(/[^A-Z]/g,'');const key=keywords.map(k=>norm(k));return wb.SheetNames.find(n=>{const nn=norm(n);return key.every(k=>nn.includes(k))})||null}
 function parseExcelFile(wb,filename){const siteName=filename.replace(/\.xlsx?$/i,'').trim();
-const sfg=wb.Sheets['SITUATION FINANCIER GLOBAL'];const sfgRows=sfg?window.XLSX.utils.sheet_to_json(sfg,{header:1,defval:''}):[];
+const sfgName=findSheet(wb,['FINANCIER','GLOBAL']);const sfg=sfgName?wb.Sheets[sfgName]:null;const sfgRows=sfg?window.XLSX.utils.sheet_to_json(sfg,{header:1,defval:''}):[];
 let devisAmount=null,recettesAmount=null;
 if(sfgRows.length>=2){const r=sfgRows[1];const dv=parseFloat(String(r[0]).replace(/\s/g,'').replace(',','.'));const rc=parseFloat(String(r[1]).replace(/\s/g,'').replace(',','.'));if(!isNaN(dv)&&dv>0)devisAmount=Math.round(dv*100);if(!isNaN(rc)&&rc>0)recettesAmount=Math.round(rc*100)}
-const tf=wb.Sheets['TABLEAU FINANCIER'];if(!tf)return{siteName,devisAmount,recettesAmount,rows:[]};
+const tfName=findSheet(wb,['TABLEAU','FINANCIER']);const tf=tfName?wb.Sheets[tfName]:null;if(!tf)return{siteName,devisAmount,recettesAmount,rows:[]};
 const tfRows=window.XLSX.utils.sheet_to_json(tf,{header:1,defval:''});
 const rows=[];const today2=today();
 for(let i=1;i<tfRows.length;i++){const r=tfRows[i];const dateRaw=r[0],supplier=String(r[1]||'').trim(),worker=String(r[2]||'').trim(),amtRaw=r[3],statut=String(r[5]||'').trim().toUpperCase();
 if(!amtRaw&&amtRaw!==0)continue;const amt=parseFloat(String(amtRaw).replace(/\s/g,'').replace(',','.'));if(isNaN(amt)||amt<=0)continue;
-const isWorker=!supplier||supplier.toLowerCase()==='salaires'||supplier.toLowerCase()==='virements';
-const partyName=isWorker?(worker||supplier):(supplier+(worker&&worker.toLowerCase()!=='salaires'&&worker.toLowerCase()!=='virements'?'':'')||worker);
+const supplierIsLabel=!supplier||['salaires','virements','espèces','especes'].includes(supplier.toLowerCase());
+const workerIsLabel=!worker||['salaires','virements','espèces','especes'].includes(worker.toLowerCase());
+const isWorker=supplierIsLabel&&!workerIsLabel;
+const partyName=isWorker?worker:(supplierIsLabel?worker:supplier);
 if(!partyName)continue;
 const isoDate=excelDateToISO(dateRaw)||today2;
 const paid=statut.includes('PAYE')&&!statut.includes('NON');
