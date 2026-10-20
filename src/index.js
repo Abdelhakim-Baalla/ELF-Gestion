@@ -80,6 +80,54 @@ async function handle(request,env){const url=new URL(request.url),path=url.pathn
  const diff=Object.fromEntries(keys.map((k,i)=>[k,{from:old[k],to:vals[i]}]));
  await audit(db,user,'update',kind,id,old,diff);return response({ok:true})
  }
+ if(path==='/api/import'&&method==='POST'){
+ checkWrite(user);
+ const b=await request.json();
+ const siteName=text(b.siteName,240);if(!siteName)throw Error('Nom de chantier manquant');
+ const rows=Array.isArray(b.rows)?b.rows:[];const created=now();
+ // Create site
+ const siteId=uid();
+ await db.prepare('INSERT INTO sites VALUES (?,?,?,?,?,?,?)').bind(siteId,siteName,'ELF','','saisie',0,created).run();
+ await audit(db,user,'create','sites',siteId,null,{name:siteName,owner:'ELF'});
+ // Create devis if present
+ if(b.devisAmount&&Number.isInteger(b.devisAmount)&&b.devisAmount>0){
+ const qid=uid();await db.prepare('INSERT INTO quotes VALUES (?,?,?,?,?,?,0,?)').bind(qid,siteId,'devis',b.devisAmount,created.slice(0,10),'Import Excel',created).run();
+ await audit(db,user,'create','quotes',qid,null,{site_id:siteId,amount:b.devisAmount});
+ }
+ // Create receipt if present
+ if(b.recettesAmount&&Number.isInteger(b.recettesAmount)&&b.recettesAmount>0){
+ const rid=uid();await db.prepare('INSERT INTO receipts VALUES (?,?,?,?,?,0,?)').bind(rid,siteId,b.recettesAmount,created.slice(0,10),'Import Excel',created).run();
+ await audit(db,user,'create','receipts',rid,null,{site_id:siteId,amount:b.recettesAmount});
+ }
+ // Party cache: name -> id
+ const partyCache=new Map();
+ const getOrCreateParty=async(name,isWorker)=>{
+ const key=name.toLowerCase();
+ if(partyCache.has(key))return partyCache.get(key);
+ const existing=await dbget(db,'SELECT id FROM parties WHERE LOWER(name)=? AND archived=0',key);
+ if(existing){partyCache.set(key,existing.id);return existing.id}
+ const pid=uid(),kind=isWorker?'worker':'supplier';
+ await db.prepare('INSERT INTO parties VALUES (?,?,?,?,?,0)').bind(pid,kind,name,'',created).run();
+ await audit(db,user,'create','parties',pid,null,{name,kind});
+ partyCache.set(key,pid);return pid;
+ };
+ // Insert expenses + payments
+ for(const row of rows){
+ if(!row.partyName||!row.amount||row.amount<=0)continue;
+ const isoDate=text(row.date,10);let d;try{d=date(isoDate)}catch{d=created.slice(0,10)}
+ const partyId=await getOrCreateParty(text(row.partyName,240),!!row.isWorker);
+ const expId=uid();
+ const typ=row.isWorker?'worker':'supplier';
+ await db.prepare('INSERT INTO expenses VALUES (?,?,?,?,?,?,?,?,0,?)').bind(expId,siteId,partyId,typ,text(row.partyName,240),row.amount,d,'Import Excel',created).run();
+ await audit(db,user,'create','expenses',expId,null,{site_id:siteId,party_id:partyId,amount:row.amount});
+ if(row.paid&&!row.partial){
+ const payId=uid();
+ await db.prepare('INSERT INTO payments VALUES (?,?,?,?,?,?,0,?)').bind(payId,expId,row.amount,'ELF',d,'Import Excel',created).run();
+ await audit(db,user,'create','payments',payId,null,{expense_id:expId,amount:row.amount});
+ }
+ }
+ return response({ok:true,siteId});
+ }
  if(path==='/api/cancel'&&method==='POST'){
  checkWrite(user);const b=await request.json(),kind=text(b.kind),id=text(b.id);const CANCEL_TABLES=new Set(['quotes','receipts','expenses','payments','larbi_transfers']);if(!CANCEL_TABLES.has(kind))throw Error('Annulation non autorisée');const old=await dbget(db,`SELECT * FROM ${kind} WHERE id=?`,id);if(!old||old.canceled)throw Error('Opération introuvable');if(kind==='expenses'){const paid=await dbget(db,'SELECT COUNT(*) n FROM payments WHERE expense_id=? AND canceled=0',id);if(paid.n)throw Error('Annuler les paiements liés avant la dépense')}
  await db.prepare(`UPDATE ${kind} SET canceled=1 WHERE id=?`).bind(id).run();await audit(db,user,'cancel',kind,id,old,{...old,canceled:1});return response({ok:true})
