@@ -21,7 +21,7 @@ function checkWrite(u){if(u.role==='viewer')throw Error('Accès lecture seule')}
 function checkAdmin(u){if(u.role!=='admin')throw Error('Administrateur requis')}
 const SAFE_TABLES=new Set(['sites','parties','quotes','receipts','expenses','payments','larbi_transfers']);
 const allowed={sites:['name','phone','progress'],parties:['name','phone'],quotes:['type','amount','date','note'],receipts:['amount','date','note'],expenses:['type','description','amount','date','note'],payments:['amount','payer','date','note'],larbi_transfers:['direction','amount','site_id','date','note']};
-async function getData(db,limit=10000){const [sites,parties,quotes,receipts,expenses,payments,transfers]=await Promise.all([
+async function getData(db){const [sites,parties,quotes,receipts,expenses,payments,transfers]=await Promise.all([
  dball(db,'SELECT * FROM sites WHERE archived=0 ORDER BY name COLLATE NOCASE'),
  dball(db,'SELECT * FROM parties WHERE archived=0 ORDER BY name COLLATE NOCASE'),
  dball(db,'SELECT * FROM quotes WHERE canceled=0 ORDER BY date DESC,created_at DESC'),
