@@ -21,14 +21,14 @@ function checkWrite(u){if(u.role==='viewer')throw Error('Accès lecture seule')}
 function checkAdmin(u){if(u.role!=='admin')throw Error('Administrateur requis')}
 const SAFE_TABLES=new Set(['sites','parties','quotes','receipts','expenses','payments','larbi_transfers']);
 const allowed={sites:['name','phone','progress'],parties:['name','phone'],quotes:['type','amount','date','note'],receipts:['amount','date','note'],expenses:['type','description','amount','date','note'],payments:['amount','payer','date','note'],larbi_transfers:['direction','amount','site_id','date','note']};
-async function getData(db,limit=500){const [sites,parties,quotes,receipts,expenses,payments,transfers]=await Promise.all([
+async function getData(db,limit=10000){const [sites,parties,quotes,receipts,expenses,payments,transfers]=await Promise.all([
  dball(db,'SELECT * FROM sites WHERE archived=0 ORDER BY name COLLATE NOCASE'),
  dball(db,'SELECT * FROM parties WHERE archived=0 ORDER BY name COLLATE NOCASE'),
- dball(db,'SELECT * FROM quotes WHERE canceled=0 ORDER BY date DESC,created_at DESC LIMIT ?',limit),
- dball(db,'SELECT * FROM receipts WHERE canceled=0 ORDER BY date DESC,created_at DESC LIMIT ?',limit),
- dball(db,'SELECT * FROM expenses WHERE canceled=0 ORDER BY date DESC,created_at DESC LIMIT ?',limit),
- dball(db,'SELECT * FROM payments WHERE canceled=0 ORDER BY date DESC,created_at DESC LIMIT ?',limit),
- dball(db,'SELECT * FROM larbi_transfers WHERE canceled=0 ORDER BY date DESC,created_at DESC LIMIT ?',limit)]);
+ dball(db,'SELECT * FROM quotes WHERE canceled=0 ORDER BY date DESC,created_at DESC'),
+ dball(db,'SELECT * FROM receipts WHERE canceled=0 ORDER BY date DESC,created_at DESC'),
+ dball(db,'SELECT * FROM expenses WHERE canceled=0 ORDER BY date DESC,created_at DESC'),
+ dball(db,'SELECT * FROM payments WHERE canceled=0 ORDER BY date DESC,created_at DESC'),
+ dball(db,'SELECT * FROM larbi_transfers WHERE canceled=0 ORDER BY date DESC,created_at DESC')]);
 return {sites,parties,quotes,receipts,expenses,payments,transfers,totals:summarize({sites,parties,quotes,receipts,expenses,payments,transfers})}}
 async function handle(request,env){const url=new URL(request.url),path=url.pathname,method=request.method,db=env.DB;if(!db)return fail('Base D1 non reliée : configurer le binding DB dans Cloudflare.',503);
  if(path==='/api/health')return response({status:'ok',database:true});
@@ -48,7 +48,7 @@ async function handle(request,env){const url=new URL(request.url),path=url.pathn
  const user=await session(request,db);if(!user)return fail('Connexion nécessaire',401);
  if(path==='/api/me'&&method==='GET')return response({user});
  if(path==='/api/logout'&&method==='POST'){const token=(request.headers.get('cookie')||'').match(/elf_session=([^;]+)/)?.[1];if(token)await db.prepare('DELETE FROM sessions WHERE id_hash=?').bind(await hashToken(decodeURIComponent(token))).run();return response({ok:true},200,{'set-cookie':cookie('',0)})}
- if(path==='/api/data'&&method==='GET'){const limit=Math.min(parseInt(url.searchParams.get('limit')||'500'),2000);return response(await getData(db,limit))}
+ if(path==='/api/data'&&method==='GET'){return response(await getData(db))}
  if(path==='/api/archived'&&method==='GET'){const kind=url.searchParams.get('kind');if(kind!=='sites'&&kind!=='parties')return fail('Type invalide');return response(await dball(db,kind==='sites'?'SELECT * FROM sites WHERE archived=1 ORDER BY name COLLATE NOCASE':'SELECT * FROM parties WHERE archived=1 ORDER BY name COLLATE NOCASE'))}
  if(path==='/api/audit'&&method==='GET'){checkAdmin(user);const rows=await dball(db,'SELECT a.*,u.name user_name FROM audit a JOIN users u ON u.id=a.user_id ORDER BY a.created_at DESC LIMIT 150');return response(rows)}
  if(path==='/api/users'&&method==='GET'){checkAdmin(user);return response(await dball(db,'SELECT id,name,email,role,active,created_at FROM users ORDER BY created_at'))}
