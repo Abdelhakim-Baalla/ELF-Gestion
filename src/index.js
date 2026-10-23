@@ -43,7 +43,7 @@ async function handle(request,env){const url=new URL(request.url),path=url.pathn
  if(path==='/api/login'&&method==='POST'){
   const b=await request.json(),email=text(b.email,200).toLowerCase(),u=await dbget(db,'SELECT * FROM users WHERE email=?',email);
   if(!u||!u.active||!(await verifyPassword(String(b.password||''),u.salt,u.password_hash)))return fail('Identifiants incorrects',401);
-  const token=uid()+'.'+uid(),idHash=await hashToken(token);await db.prepare('INSERT INTO sessions VALUES (?,?,?)').bind(idHash,u.id,new Date(Date.now()+7*86400000).toISOString()).run();return response({user:{id:u.id,name:u.name,role:u.role,email:u.email} },200,{'set-cookie':cookie(token,7*86400)})
+  const token=uid()+'.'+uid(),idHash=await hashToken(token);await db.prepare('INSERT INTO sessions VALUES (?,?,?)').bind(idHash,u.id,new Date(Date.now()+30*86400000).toISOString()).run();return response({user:{id:u.id,name:u.name,role:u.role,email:u.email} },200,{'set-cookie':cookie(token,30*86400)})
  }
  const user=await session(request,db);if(!user)return fail('Connexion nécessaire',401);
  if(path==='/api/me'&&method==='GET')return response({user});
